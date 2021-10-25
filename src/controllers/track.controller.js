@@ -10,9 +10,12 @@ require('dotenv').config();
 const { track, artist } = model;
 
 async function _getAccessToken () {
+
     const base64Credentials = Buffer.from(`${process.env.CLIENT_ID}:${process.env.CLIENT_SECRET}`).toString('base64');
-  
     let accessData = cache.get('access_data');
+
+    // request access_token from spotify api and cache duration
+    // is set to it's access expiration
     if(accessData === undefined) {
       accessData = await request({
         method: 'POST',
@@ -24,6 +27,7 @@ async function _getAccessToken () {
         body: 'grant_type=client_credentials',
         json: true
       });
+
       cache.set('access_data', accessData, accessData.expires_in);
 
     } else {
@@ -52,8 +56,11 @@ export default {
       
           const tracks = (trackData && trackData.tracks.items) || [];
           
+          // Get the most popular track
           const { name, artists, album, id, duration_ms, external_ids } = orderBy(tracks, ['popularity'], 'desc').shift();;
-          const images = album.images;
+
+          // Grabbing the first image url of the list
+          const imageUrl = get(album, 'images.0.url');
 
           const found = await track.findOne({ where: { isrc: get(external_ids, 'isrc') } });
 
@@ -61,10 +68,11 @@ export default {
             const newTrack = await track.create({
                 name,
                 isrc: get(external_ids, 'isrc'),
-                imageUrl: images[0].url,
+                imageUrl,
                 spotifyId: id,
                 durationMs: duration_ms
             });
+
             for(let i=0; i<artists.length; i++) {
               await artist.create({
                   name: artists[i].name,
@@ -80,7 +88,7 @@ export default {
         }
       
       } catch(e) {
-        console.log('err', e);
+        console.log('error', e);
       }
   },
   async getTrackByISRC(req, res) {
